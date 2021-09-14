@@ -15,10 +15,7 @@ import (
 	Public function returning true if a VM is detected.
 	If so, a non-empty string is also returned to tell how it was detected.
 */
-func IsRunningInVirtualMachine() (bool, string) {
-	if vmDetected, how := CommonChecks(); vmDetected {
-		return vmDetected, how
-	}
+func IsRunningInVirtualMachine() int {
 
 	if vmDetected, registryKey := checkRegistry(); vmDetected {
 		return vmDetected, fmt.Sprintf("Registry key (%v)", registryKey)
@@ -29,113 +26,6 @@ func IsRunningInVirtualMachine() (bool, string) {
 	}
 
 	return false, "nothing"
-}
-
-func extractKeyTypeFrom(registryKey string) (registry.Key, string, error) {
-	firstSeparatorIndex := strings.Index(registryKey, string(os.PathSeparator))
-	keyTypeStr := registryKey[:firstSeparatorIndex]
-	keyPath := registryKey[firstSeparatorIndex+1:]
-
-	var keyType registry.Key
-	switch keyTypeStr {
-	case "HKLM":
-		keyType = registry.LOCAL_MACHINE
-		break
-	case "HKCR":
-		keyType = registry.CLASSES_ROOT
-		break
-	case "HKCU":
-		keyType = registry.CURRENT_USER
-		break
-	case "HKU":
-		keyType = registry.USERS
-		break
-	case "HKCC":
-		keyType = registry.CURRENT_CONFIG
-		break
-	default:
-		return keyType, "", errors.New(fmt.Sprintf("Invalid keytype (%v)", keyTypeStr))
-	}
-
-	return keyType, keyPath, nil
-}
-
-func doesRegistryKeyContain(registryKey string, expectedSubString string) bool {
-
-	keyType, keyPath, err := extractKeyTypeFrom(registryKey)
-
-	if err != nil {
-		PrintError(err)
-		return false
-	}
-
-	keyPath, keyName := filepath.Split(keyPath)
-
-	keyHandle, err := registry.OpenKey(keyType, keyPath, registry.QUERY_VALUE)
-
-	if err != nil {
-		PrintError(fmt.Sprintf("Cannot open %v : %v", registryKey, err))
-		return false
-	}
-
-	defer keyHandle.Close()
-
-	valueFound, _, err := keyHandle.GetStringValue(keyName)
-
-	if err != nil {
-		PrintError(err)
-	}
-
-	return strings.Contains(valueFound, expectedSubString)
-}
-
-func doesRegistryKeyExist(registryKey string) bool {
-
-	subkeyPrefix := ""
-
-	// Handle trailing wildcard
-	if registryKey[len(registryKey)-1:] == "*" {
-		registryKey, subkeyPrefix = path.Split(registryKey)
-		subkeyPrefix = subkeyPrefix[:len(subkeyPrefix)-1] // remove *
-	}
-
-	keyType, keyPath, err := extractKeyTypeFrom(registryKey)
-
-	if err != nil {
-		PrintError(err)
-		return false
-	}
-
-	keyHandle, err := registry.OpenKey(keyType, keyPath, registry.QUERY_VALUE)
-
-	if err != nil {
-		PrintError(fmt.Sprintf("Cannot open %v : %v", registryKey, err))
-		return false
-	}
-
-	defer keyHandle.Close()
-
-	// If a wildcard has been specified...
-	if subkeyPrefix != "" {
-		// ... we look for sub-keys to see if one exists
-		subKeys, err := keyHandle.ReadSubKeyNames(0xFFFF)
-
-		if err != nil {
-			PrintError(err)
-			return false
-		}
-
-		for _, subKeyName := range subKeys {
-			if strings.HasPrefix(subKeyName, subkeyPrefix) {
-				return true
-			}
-		}
-
-		return false
-	} else {
-		// The registryKey we were looking for has been found
-		return true
-	}
 }
 
 func checkRegistry() (bool, string) {
@@ -316,4 +206,111 @@ func checkFileSystem() (bool, string) {
 	}
 
 	return false, "none"
+}
+
+func extractKeyTypeFrom(registryKey string) (registry.Key, string, error) {
+	firstSeparatorIndex := strings.Index(registryKey, string(os.PathSeparator))
+	keyTypeStr := registryKey[:firstSeparatorIndex]
+	keyPath := registryKey[firstSeparatorIndex+1:]
+
+	var keyType registry.Key
+	switch keyTypeStr {
+	case "HKLM":
+		keyType = registry.LOCAL_MACHINE
+		break
+	case "HKCR":
+		keyType = registry.CLASSES_ROOT
+		break
+	case "HKCU":
+		keyType = registry.CURRENT_USER
+		break
+	case "HKU":
+		keyType = registry.USERS
+		break
+	case "HKCC":
+		keyType = registry.CURRENT_CONFIG
+		break
+	default:
+		return keyType, "", errors.New(fmt.Sprintf("Invalid keytype (%v)", keyTypeStr))
+	}
+
+	return keyType, keyPath, nil
+}
+
+func doesRegistryKeyContain(registryKey string, expectedSubString string) bool {
+
+	keyType, keyPath, err := extractKeyTypeFrom(registryKey)
+
+	if err != nil {
+		PrintError(err)
+		return false
+	}
+
+	keyPath, keyName := filepath.Split(keyPath)
+
+	keyHandle, err := registry.OpenKey(keyType, keyPath, registry.QUERY_VALUE)
+
+	if err != nil {
+		PrintError(fmt.Sprintf("Cannot open %v : %v", registryKey, err))
+		return false
+	}
+
+	defer keyHandle.Close()
+
+	valueFound, _, err := keyHandle.GetStringValue(keyName)
+
+	if err != nil {
+		PrintError(err)
+	}
+
+	return strings.Contains(valueFound, expectedSubString)
+}
+
+func doesRegistryKeyExist(registryKey string) bool {
+
+	subkeyPrefix := ""
+
+	// Handle trailing wildcard
+	if registryKey[len(registryKey)-1:] == "*" {
+		registryKey, subkeyPrefix = path.Split(registryKey)
+		subkeyPrefix = subkeyPrefix[:len(subkeyPrefix)-1] // remove *
+	}
+
+	keyType, keyPath, err := extractKeyTypeFrom(registryKey)
+
+	if err != nil {
+		PrintError(err)
+		return false
+	}
+
+	keyHandle, err := registry.OpenKey(keyType, keyPath, registry.QUERY_VALUE)
+
+	if err != nil {
+		PrintError(fmt.Sprintf("Cannot open %v : %v", registryKey, err))
+		return false
+	}
+
+	defer keyHandle.Close()
+
+	// If a wildcard has been specified...
+	if subkeyPrefix != "" {
+		// ... we look for sub-keys to see if one exists
+		subKeys, err := keyHandle.ReadSubKeyNames(0xFFFF)
+
+		if err != nil {
+			PrintError(err)
+			return false
+		}
+
+		for _, subKeyName := range subKeys {
+			if strings.HasPrefix(subKeyName, subkeyPrefix) {
+				return true
+			}
+		}
+
+		return false
+	} else {
+		// The registryKey we were looking for has been found
+		return true
+	}
 }

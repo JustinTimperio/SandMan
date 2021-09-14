@@ -8,5 +8,6 @@ import (
 
 func TestMain(m *testing.M) {
 
-	fmt.Println(SandMan.Detect())
+	fmt.Println("Hardware VM score:", SandMan.DetectHardware())
+	fmt.Println("VM Artifact score:", SandMan.DetectVMArtifacts())
 }

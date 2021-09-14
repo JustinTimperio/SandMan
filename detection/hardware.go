@@ -1,21 +1,16 @@
 package detection
 
 import (
-	"runtime"
-
 	"github.com/klauspost/cpuid"
+	"github.com/pbnjay/memory"
 )
 
 // SandboxRam is used to check if the environment's
 // RAM is less than a given size.
 func SandboxRam() bool {
-	ram_mb := 1024
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	rmb := uint64(ram_mb)
-	ram := m.TotalAlloc / 1024 / 1024
-
-	return ram <= rmb
+	ramSmol := 1073741824
+	ram := int(memory.TotalMemory())
+	return ram <= ramSmol
 }
 
 func VMCPUTest() bool {

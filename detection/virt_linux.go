@@ -10,8 +10,8 @@ import (
 )
 
 /*
-Public function returning score on VM is detected.
-Scores >= 50 are highly likely to be a VM
+VirtualMachineScore is a public function returning a VM likelyhood rating.
+Different methods are given different weights but typically scores >= 50 are highly likely to be a VM
 */
 func VirtualMachineScore() int {
 	score := 0
