@@ -1,8 +1,11 @@
-# SandMan
-Put sandboxes to bed. 
+<p align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/en/8/8b/Sandman_1974_issue1.jpg">
+</p>
 
+# Sandman
 SandMan is a set of advanced tools for deteting and evading malware analysis sandboxes. Based on the work of ColdFire and VM-Detection, SandMan combines and expands upon these detection methods into a full toolset for evading sandboxes.
-![SANDMAN](https://upload.wikimedia.org/wikipedia/en/8/8b/Sandman_1974_issue1.jpg)
+
+
 
 ## Why SandMan?
 
