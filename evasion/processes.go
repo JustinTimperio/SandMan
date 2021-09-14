@@ -1,4 +1,4 @@
-package detection
+package evasion
 
 import ps "github.com/mitchellh/go-ps"
 

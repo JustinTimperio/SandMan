@@ -1,6 +1,7 @@
-package os
+package detection
 
 import (
+	"SandMan/shared"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -10,57 +11,45 @@ import (
 
 /*
 Public function returning score on VM is detected.
-Scores Higher than 50 are highly likely to be a VM
+Scores >= 50 are highly likely to be a VM
 */
 func VirtualMachineScore() int {
 	score := 0
 
 	// Check DMI Table for VM Entries
 	if checkDMITable() {
-		score + 50
-		fmt.Println("DMI Table (/sys/class/dmi/id/*)")
+		score = score + 50
+		fmt.Println("VM detected in DMI Table (/sys/class/dmi/id/*)")
 	}
 
 	// See if Kernel Detects a Hypervisor
 	if checkKernelRingBuffer() {
-		score + 50
-		fmt.Println("Kernel Ring Buffer (/dev/kmsg)")
+		score = score + 50
+		fmt.Println("VM detected in Kernel Ring Buffer (/dev/kmsg)")
 	}
 
 	// Check for Hypervisor Flag or User Mode Linux
 	if checkCPUInfo() {
-		score + 50
-		fmt.Println("CPU Vendor (/proc/cpuinfo)")
+		score = score + 50
+		fmt.Println("VM detected in CPU Vendor (/proc/cpuinfo)")
+	}
+
+	// Check the Device Tree for VM markers
+	if checkDeviceTree() {
+		score = score + 50
+		fmt.Println("VM detected in device tree (/proc/*)")
 	}
 
 	// Look for VM Tools in Modules
 	if checkKernelModules() {
-		score + 20
-		fmt.Println("Kernel module (/proc/modules)")
-	}
-
-	// Check for Xen Tools
-	if checkXenProcFile() {
-		score + 20
-		fmt.Println("Xen proc file (/proc/xen)")
-	}
-
-	// Some Distros Contain This File
-	if checkHypervisorType() {
-		score + 10
-		fmt.Println("Hypervisor type file (/sys/hypervisor/type)")
+		score = score + 50
+		fmt.Println("VM detected in kernel module (/proc/modules)")
 	}
 
 	// Some Distros Contain VM Marker in proc
 	if checkSysInfo() {
-		score + 10
-		fmt.Println("System Information (/proc/sysinfo)")
-	}
-
-	// Fairly Rare Check
-	if checkDeviceTree() {
-		score + 10
-		fmt.Println("VM device tree (/proc/device-tree)")
+		score = score + 10
+		fmt.Println("VM detected in System Information (/proc/sysinfo)")
 	}
 
 	return score
@@ -76,13 +65,16 @@ func checkKernelModules() bool {
 	}
 
 	// TODO: Add More Entries
-	if DoesFileContain(file, "vboxguest") {
+	if shared.DoesFileContain(file, "vboxguest") {
 		return true
 	}
-	if DoesFileContain(file, "xenfs") {
+	if shared.DoesFileContain(file, "xenfs") {
 		return true
 	}
-	if DoesFileContain(file, "qemu") {
+	if shared.DoesFileContain(file, "qemu") {
+		return true
+	}
+	if shared.DoesFileContain(file, "vmw_vsock") {
 		return true
 	}
 
@@ -112,7 +104,7 @@ func checkDMITable() bool {
 	dmiFiles, err := ioutil.ReadDir(dmiPath)
 
 	if err != nil {
-		PrintError(err)
+		fmt.Println(err)
 		return false
 	}
 
@@ -124,7 +116,7 @@ func checkDMITable() bool {
 		dmiContent, err := ioutil.ReadFile(dmiPath + dmiEntry.Name())
 
 		if err != nil {
-			PrintError(err)
+			fmt.Println(err)
 			continue
 		}
 
@@ -146,7 +138,7 @@ func checkKernelRingBuffer() bool {
 	file, err := os.Open("/dev/kmsg")
 
 	if err != nil {
-		PrintError(err)
+		fmt.Println(err)
 		return false
 	}
 
@@ -154,11 +146,11 @@ func checkKernelRingBuffer() bool {
 
 	// Set a read timeout because otherwise reading kmsg (which is a character device) will block
 	if err = file.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
-		PrintError(err)
+		fmt.Println(err)
 		return false
 	}
 
-	return DoesFileContain(file, "Hypervisor detected")
+	return shared.DoesFileContain(file, "Hypervisor detected")
 }
 
 // Look in CPUInfo for the hypervisor flag
@@ -166,15 +158,36 @@ func checkKernelRingBuffer() bool {
 func checkCPUInfo() bool {
 	file, err := os.Open("/proc/cpuinfo")
 	if err != nil {
-		PrintError(err)
+		fmt.Println(err)
 		return false
 	}
 	defer file.Close()
 
-	if DoesFileContain(file, "hypervisor") {
+	if shared.DoesFileContain(file, "hypervisor") {
 		return true
 	}
-	if DoesFileContain(file, "User Mode Linux") {
+	if shared.DoesFileContain(file, "User Mode Linux") {
+		return true
+	}
+
+	return false
+}
+
+// Run a bunch of file system checks for various VM markers in /proc/
+func checkDeviceTree() bool {
+	if shared.DoesPathExist("/proc/sys/xen") {
+		return true
+	}
+	if shared.DoesPathExist("/proc/xen") {
+		return true
+	}
+	if shared.DoesPathExist("/proc/device-tree/hypervisor/compatible") {
+		return true
+	}
+	if shared.DoesPathExist("/proc/device-tree/fw-cfg") {
+		return true
+	}
+	if shared.DoesPathExist("/sys/hypervisor/type") {
 		return true
 	}
 
@@ -184,36 +197,16 @@ func checkCPUInfo() bool {
 // Some GNU/Linux distributions expose /proc/sysinfo containing potential VM info
 // https://www.ibm.com/support/knowledgecenter/en/linuxonibm/com.ibm.linux.z.lhdd/lhdd_t_sysinfo.html
 func checkSysInfo() bool {
-	file, err := os.Open("/proc/sysinfo")
-	if err != nil {
-		PrintError(err)
-		return false
+
+	if shared.DoesPathExist("/proc/sysinfo") {
+		file, err := os.Open("/proc/sysinfo")
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
+		defer file.Close()
+
+		return shared.DoesFileContain(file, "VM00")
 	}
-	defer file.Close()
-
-	return DoesFileContain(file, "VM00")
-}
-
-// Some virtualization technologies can be detected using /proc/device-tree
-func checkDeviceTree() bool {
-	deviceTreeBase := "/proc/device-tree"
-
-	if DoesFileExist(deviceTreeBase + "/hypervisor/compatible") {
-		return true
-	}
-	if DoesFileExist(deviceTreeBase + "/fw-cfg") {
-		return true
-	}
-
 	return false
-}
-
-// Some virtualization technologies can be detected using /proc/type
-func checkHypervisorType() bool {
-	return DoesFileExist("/sys/hypervisor/type")
-}
-
-// Xen can be detected thanks to /proc/xen
-func checkXenProcFile() bool {
-	return DoesFileExist("/proc/xen")
 }

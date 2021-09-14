@@ -20,14 +20,15 @@ func ContainsAny(str string, elements []string) bool {
 	return false
 }
 
-func DoesFileExist(path string) bool {
-	_, err := os.Stat(path)
-
-	if err != nil {
-		fmt.Println(err)
+func DoesPathExist(path string) bool {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		} else {
+			return true
+		}
 	}
-
-	return !os.IsNotExist(err)
+	return true
 }
 
 func DoesFileContain(file *os.File, stringsToBeFound ...string) bool {
@@ -37,11 +38,9 @@ func DoesFileContain(file *os.File, stringsToBeFound ...string) bool {
 		line, err := reader.ReadString('\n')
 
 		if err != nil {
-
 			if !os.IsTimeout(err) && err != io.EOF {
 				fmt.Println(err)
 			}
-
 			return false
 		}
 

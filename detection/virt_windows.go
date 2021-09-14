@@ -1,4 +1,4 @@
-package os
+package detection
 
 import (
 	"errors"
@@ -10,6 +10,26 @@ import (
 
 	"golang.org/x/sys/windows/registry"
 )
+
+/*
+	Public function returning true if a VM is detected.
+	If so, a non-empty string is also returned to tell how it was detected.
+*/
+func IsRunningInVirtualMachine() (bool, string) {
+	if vmDetected, how := CommonChecks(); vmDetected {
+		return vmDetected, how
+	}
+
+	if vmDetected, registryKey := checkRegistry(); vmDetected {
+		return vmDetected, fmt.Sprintf("Registry key (%v)", registryKey)
+	}
+
+	if vmDetected, filePath := checkFileSystem(); vmDetected {
+		return vmDetected, fmt.Sprintf("Known path found (%v)", filePath)
+	}
+
+	return false, "nothing"
+}
 
 func extractKeyTypeFrom(registryKey string) (registry.Key, string, error) {
 	firstSeparatorIndex := strings.Index(registryKey, string(os.PathSeparator))
@@ -296,24 +316,4 @@ func checkFileSystem() (bool, string) {
 	}
 
 	return false, "none"
-}
-
-/*
-	Public function returning true if a VM is detected.
-	If so, a non-empty string is also returned to tell how it was detected.
-*/
-func IsRunningInVirtualMachine() (bool, string) {
-	if vmDetected, how := CommonChecks(); vmDetected {
-		return vmDetected, how
-	}
-
-	if vmDetected, registryKey := checkRegistry(); vmDetected {
-		return vmDetected, fmt.Sprintf("Registry key (%v)", registryKey)
-	}
-
-	if vmDetected, filePath := checkFileSystem(); vmDetected {
-		return vmDetected, fmt.Sprintf("Known path found (%v)", filePath)
-	}
-
-	return false, "nothing"
 }
