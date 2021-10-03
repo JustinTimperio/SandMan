@@ -1,10 +1,10 @@
 package detection
 
 import (
+	"SandMan/shared"
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -15,20 +15,31 @@ import (
 	Public function returning true if a VM is detected.
 	If so, a non-empty string is also returned to tell how it was detected.
 */
-func IsRunningInVirtualMachine() int {
+func VirtualMachineScore() int {
+	score := 0
 
-	if vmDetected, registryKey := checkRegistry(); vmDetected {
-		return vmDetected, fmt.Sprintf("Registry key (%v)", registryKey)
+	regHits := checkRegistryKeys()
+	if regHits > 0 {
+		fmt.Println("Reg Score:", regHits)
+		score = score + regHits*5
 	}
 
-	if vmDetected, filePath := checkFileSystem(); vmDetected {
-		return vmDetected, fmt.Sprintf("Known path found (%v)", filePath)
+	vendorHits := checkRegistryVendors()
+	if vendorHits > 0 {
+		fmt.Println("Vendor Score:", vendorHits)
+		score = score + vendorHits*5
 	}
 
-	return false, "nothing"
+	fsHits := checkFileSystem()
+	if fsHits > 0 {
+		fmt.Println("FS Score", fsHits)
+		score = score + fsHits*5
+	}
+
+	return score
 }
 
-func checkRegistry() (bool, string) {
+func checkRegistryKeys() int {
 
 	hyperVKeys := []string{
 		`HKLM\SOFTWARE\Microsoft\Hyper-V`,
@@ -93,6 +104,21 @@ func checkRegistry() (bool, string) {
 		`HKLM\SYSTEM\ControlSet001\Services\xenvdb`,
 	}
 
+	allKeys := [][]string{hyperVKeys, parallelsKeys, virtualBoxKeys, virtualPCKeys, vmwareKeys, xenKeys}
+
+	hits := 0
+	for _, keys := range allKeys {
+		for _, key := range keys {
+			if doesRegistryKeyExist(key) {
+				hits++
+			}
+		}
+	}
+
+	return hits
+}
+
+func checkRegistryVendors() int {
 	// TODO : fill with https://evasions.checkpoint.com/techniques/registry.html#check-if-keys-contain-strings
 	blacklistedValuesPerKeyPerVendor := map[string]map[string]string{
 		"Anubis": {
@@ -121,29 +147,19 @@ func checkRegistry() (bool, string) {
 			`HKLM\SYSTEM\CurrentControlSet\Control\SystemInformation\SystemProductName`:                    "VIRTUAL",
 		},
 	}
-
-	allKeys := [][]string{hyperVKeys, parallelsKeys, virtualBoxKeys, virtualPCKeys, vmwareKeys, xenKeys}
-
-	for _, keys := range allKeys {
-		for _, key := range keys {
-			if doesRegistryKeyExist(key) {
-				return true, key
-			}
-		}
-	}
-
+	hits := 0
 	for /*vendor*/ _, registryValuesPerPath := range blacklistedValuesPerKeyPerVendor {
 		for registryPath, expectedValue := range registryValuesPerPath {
 			if doesRegistryKeyContain(registryPath, expectedValue) {
-				return true, registryPath + " contains " + expectedValue
+				hits++
 			}
 		}
 	}
 
-	return false, "none"
+	return hits
 }
 
-func checkFileSystem() (bool, string) {
+func checkFileSystem() int {
 	// check for known path on the filesystem, either files or directories
 	generalPath := []string{
 		`c:\take_screenshot.ps1`,
@@ -196,16 +212,16 @@ func checkFileSystem() (bool, string) {
 	}
 
 	allPath := [][]string{virtualpcPath, prlPath, vmwarePath, vboxPath, generalPath}
-
+	hits := 0
 	for _, paths := range allPath {
 		for _, p := range paths {
-			if DoesFileExist(p) {
-				return true, p
+			if shared.DoesPathExist(p) {
+				hits++
 			}
 		}
 	}
 
-	return false, "none"
+	return hits
 }
 
 func extractKeyTypeFrom(registryKey string) (registry.Key, string, error) {
@@ -217,19 +233,14 @@ func extractKeyTypeFrom(registryKey string) (registry.Key, string, error) {
 	switch keyTypeStr {
 	case "HKLM":
 		keyType = registry.LOCAL_MACHINE
-		break
 	case "HKCR":
 		keyType = registry.CLASSES_ROOT
-		break
 	case "HKCU":
 		keyType = registry.CURRENT_USER
-		break
 	case "HKU":
 		keyType = registry.USERS
-		break
 	case "HKCC":
 		keyType = registry.CURRENT_CONFIG
-		break
 	default:
 		return keyType, "", errors.New(fmt.Sprintf("Invalid keytype (%v)", keyTypeStr))
 	}
@@ -240,27 +251,22 @@ func extractKeyTypeFrom(registryKey string) (registry.Key, string, error) {
 func doesRegistryKeyContain(registryKey string, expectedSubString string) bool {
 
 	keyType, keyPath, err := extractKeyTypeFrom(registryKey)
-
 	if err != nil {
-		PrintError(err)
+		//fmt.Println(err)
 		return false
 	}
 
 	keyPath, keyName := filepath.Split(keyPath)
-
 	keyHandle, err := registry.OpenKey(keyType, keyPath, registry.QUERY_VALUE)
-
 	if err != nil {
-		PrintError(fmt.Sprintf("Cannot open %v : %v", registryKey, err))
+		// fmt.Println(fmt.Sprintf("Cannot open %v : %v", registryKey, err))
 		return false
 	}
-
 	defer keyHandle.Close()
 
 	valueFound, _, err := keyHandle.GetStringValue(keyName)
-
 	if err != nil {
-		PrintError(err)
+		//fmt.Println(err)
 	}
 
 	return strings.Contains(valueFound, expectedSubString)
@@ -269,36 +275,31 @@ func doesRegistryKeyContain(registryKey string, expectedSubString string) bool {
 func doesRegistryKeyExist(registryKey string) bool {
 
 	subkeyPrefix := ""
-
 	// Handle trailing wildcard
 	if registryKey[len(registryKey)-1:] == "*" {
-		registryKey, subkeyPrefix = path.Split(registryKey)
+		registryKey, subkeyPrefix = filepath.Split(registryKey)
 		subkeyPrefix = subkeyPrefix[:len(subkeyPrefix)-1] // remove *
 	}
 
 	keyType, keyPath, err := extractKeyTypeFrom(registryKey)
-
 	if err != nil {
-		PrintError(err)
+		//fmt.Println(err)
 		return false
 	}
 
 	keyHandle, err := registry.OpenKey(keyType, keyPath, registry.QUERY_VALUE)
-
 	if err != nil {
-		PrintError(fmt.Sprintf("Cannot open %v : %v", registryKey, err))
+		// fmt.Println(fmt.Sprintf("Cannot open %v : %v", registryKey, err))
 		return false
 	}
-
 	defer keyHandle.Close()
 
 	// If a wildcard has been specified...
 	if subkeyPrefix != "" {
-		// ... we look for sub-keys to see if one exists
+		// we look for sub-keys to see if one exists
 		subKeys, err := keyHandle.ReadSubKeyNames(0xFFFF)
-
 		if err != nil {
-			PrintError(err)
+			//fmt.Println(err)
 			return false
 		}
 

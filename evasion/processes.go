@@ -1,6 +1,10 @@
 package evasion
 
-import ps "github.com/mitchellh/go-ps"
+import (
+	"SandMan/shared"
+
+	ps "github.com/mitchellh/go-ps"
+)
 
 // SandboxProc checks if there are processes that indicate
 // a virtualized environment.
@@ -30,7 +34,7 @@ func SandboxProc() bool {
 	}
 	p, _ := processes()
 	for _, name := range p {
-		if ContainsAny(name, sandbox_processes) {
+		if shared.ContainsAny(name, sandbox_processes) {
 			return true
 		}
 	}

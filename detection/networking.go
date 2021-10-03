@@ -1,6 +1,7 @@
 package detection
 
 import (
+	"fmt"
 	"net"
 	"strings"
 )
@@ -8,7 +9,6 @@ import (
 // SandboxMac is used to check if the environment's MAC address
 // matches standard MAC adddresses of virtualized environments.
 func SandboxMac() bool {
-	hits := 0
 	sandbox_macs := []string{
 		`00:0C:29`, // VMWare
 		`00:1C:14`, // VMWare
@@ -27,10 +27,11 @@ func SandboxMac() bool {
 	for _, iface := range ifaces {
 		for _, mac := range sandbox_macs {
 			if strings.Contains(strings.ToLower(iface.HardwareAddr.String()), strings.ToLower(mac)) {
-				hits += 1
+				fmt.Println(iface.HardwareAddr.String())
+				return true
 			}
 		}
 	}
 
-	return hits == 0
+	return false
 }

@@ -14,8 +14,5 @@ func SandboxRam() bool {
 }
 
 func VMCPUTest() bool {
-	if cpuid.CPU.VM() {
-		return true
-	}
-	return false
+	return cpuid.CPU.VM()
 }
